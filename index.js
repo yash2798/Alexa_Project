@@ -1,5 +1,6 @@
 exports.handler = function(event, context){
   const request = event.request;
+  //Type of Request!!
   if (request.type === 'LaunchRequest'){
     var resObj = {
       outputText: 'Welcome to the online Shopper Skill. You can use me to shop online on a number of shopping sites. What are you looking for?',
@@ -10,6 +11,7 @@ exports.handler = function(event, context){
 
 
   }
+  //code to be filled here for all three intents regarding data extraction through API
   else if (request.type === 'IntentRequest'){
 
   }
@@ -24,7 +26,7 @@ exports.handler = function(event, context){
 
 
 
-
+//Function to return a response in the form of JSON.
 function response(resObj){
    var res = {
      version: "1.0",
@@ -63,3 +65,5 @@ function response(resObj){
   }
   return res;
 }
+
+//yashSS
