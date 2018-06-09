@@ -1,0 +1,23 @@
+{
+  "name": "Alexa_Project",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yash2798/Alexa_Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yash2798/Alexa_Project/issues"
+  },
+  "homepage": "https://github.com/yash2798/Alexa_Project#readme",
+  "dependencies": {
+    "express": "^4.16.3"
+  }
+}
