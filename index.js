@@ -4,6 +4,7 @@
 
 var winston = require('winston');
 var https = require('https');
+var Promise = require('bluebird');
 
 var logger = new (winston.Logger)({
     transports: [

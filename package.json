@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/yash2798/Alexa_Project#readme",
   "dependencies": {
+    "bluebird": "^3.5.1",
     "express": "^4.16.3",
     "lambda-local": "^1.5.1",
     "winston": "^2.4.2"
