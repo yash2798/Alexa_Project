@@ -3,6 +3,7 @@
 'use strict';
 
 var winston = require('winston');
+var https = require('https');
 
 var logger = new (winston.Logger)({
     transports: [
@@ -25,7 +26,7 @@ exports.handler = function (event, context) {
         if (APP_ID !== '' && event.session.application.applicationId !== APP_ID) {
             context.fail('Invalid Application ID');
          }
-      
+
         if (!event.session.attributes) {
             event.session.attributes = {};
         }
@@ -71,7 +72,7 @@ var Response = function (context,session) {
   this.ssmlEn = true;
   this._context = context;
   this._session = session;
-
+  this.repromptText = '';
   this.done = function(options) {
 
     if(options && options.speechText) {
@@ -172,31 +173,124 @@ function getError(err) {
   return msg;
 }
 
+function getMessage(id, token, callback){
+  var url = `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format='metadata'&metadataHeaders=subject&metadataHeaders=From&metadataHeaders=Date&access_token=${token}`;
+  https.get(url, function(res){
+    var body = '';
+    res.on('data', function(chunk){
+      body += chunk;
+    });
+    res.on('end', function(){
+      logger.debug(body);
+      var result = JSON.parse(body);
+      callback(result);
+    });
+  }).on('error', function(err){
+    logger.error("Error: " + err);
+    callback('', err);
+  });
+}
 
-//--------------------------------------------- Skill specific logic starts here ----------------------------------------- 
+
+function readMessages(messages, response, session){
+  logger.debug(messages);
+  var promises = messages.map(function(message){
+    return new Promise(function(resolve, reject){
+      getMessage(message.id, session.user.accessToken, function(res, err){
+        var from = res.payload.headers.find(o => o.name === 'From').value;
+        from = from.replace(/<.*/, '');
+        message.result = {
+          snippet: res.snippet;
+          subject: res.payload.headers.find(o => o.name === 'Subject').value;
+          date: res.payload.headers.find(o => o.name === 'Date').value;
+          from: from;
+        };
+        resolve();
+
+      });
+    });
+  });
+  Promise.all(promises).then(function(){
+    messages.forEach(function(message, idx){
+      respomse.speechText += `<say-as interpret-as='ordinal'>${idx + 1}</say-as> Mail is ${message.result.from} with subject ${message.result.subject}`;
+      
+    });
+    response.shouldEndSession = true;
+    if (session.attributes.offset && session.attributes.offset > 0){
+      response.speechText += 'Do you want me to read more?';
+      response.repromptText = 'You can say for example yes or stop.';
+      response.shouldEndSession = false;
+    }
+    response.done();
+  }).catch(function(err){
+    response.fail(err);
+  });
+
+
+}
+
+var maxread = 3;
+var maxmsg = 20;
+var messages;
+
+
+function getMessages(response, session){
+  var url;
+  url = `https://www.googleapis.com/gmail/v1/users/me/messages?access_token=${session.user.accessToken}&q='is:unread'`;
+  logger.debug(url);
+  https.get(url, function(res){
+    var body = '';
+    res.on('data', function(chunk){
+      body += chunk;
+    });
+    res.on('end', function(){
+      var result = JSON.parse(body);
+      if (result.resultSizeEstimate){
+        response.speechText = `You have ${result.resultSizeEstimate} unread mails in your inbox`;
+        response.speechText += 'These are the latest ones';
+      
+        messages = result.messages;
+        if (messages.length > maxread){
+          session.attributes.messages = messages.slice(0, maxmsg);
+          messages = messages.slice(0, maxread);
+          session.attributes.offset = maxread;
+        }
+        readMessages(messages, response, session);
+      }
+      else{
+        response.fail(body);
+      }
+
+    });
+  }).on('error', function(err){
+    response.fail(err);
+  });
+
+}
+
+
+//--------------------------------------------- Skill specific logic starts here -----------------------------------------
 
 //Add your skill application ID from amazon devloper portal
-var APP_ID = '';
+var APP_ID = 'amzn1.ask.skill.7775a0ba-f431-4bcc-a03e-959f14b24c04';
 
 function onSessionStarted(sessionStartedRequest, session) {
     logger.debug('onSessionStarted requestId=' + sessionStartedRequest.requestId + ', sessionId=' + session.sessionId);
     // add any session init logic here
-    
+
 }
 
 function onSessionEnded(sessionEndedRequest, session) {
   logger.debug('onSessionEnded requestId=' + sessionEndedRequest.requestId + ', sessionId=' + session.sessionId);
   // Add any cleanup logic here
-  
+
 }
 
 function onLaunch(launchRequest, session, response) {
   logger.debug('onLaunch requestId=' + launchRequest.requestId + ', sessionId=' + session.sessionId);
-
-  //response.speechText = 'Welcome msg';
-  //response.repromptText = 'Reprompt msg';
+  response.speechText = 'Welcome to SL mail skill. You can use me to check, send and manage your emails.';
+  response.repromptText = 'You can say for example, whats new in my inbox to check unread messages';
   response.shouldEndSession = false;
-  response.done();
 }
 
 
@@ -204,6 +298,34 @@ function onLaunch(launchRequest, session, response) {
 Example:
 intentHandlers['HelloIntent'] = function(request,session,response,slots) {
   //Intent logic
-  
+
 }
 **/
+intentHandlers['CheckMyMailIntent'] = function(request,session,response,slots) {
+  //Intent logic
+  getMessages(response, session);
+}
+
+intentHandlers['AMAZON.YesIntent'] = function(request,session,response) {
+  //Intent logic
+  var messages;
+  if (session.attributes.messages && session.attributes.offset > 0){
+    messages = session.attributes.messages.slice(session.attributes.offset);
+    logger.debug(session.attributes.messages);
+    if (messages.length > maxread){
+      messages = messages.slice(0, maxread);
+      session.attributes.offset += maxread;
+    }
+    else{
+      session.attributes.offset = 0;
+    }
+    readMessages(messages, response, session);
+  }
+  else{
+    response.speechText = 'Wrong invocation of intent';
+    response.shouldEndSession = true;
+    response.done();
+  }
+
+}
+
