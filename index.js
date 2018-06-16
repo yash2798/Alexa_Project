@@ -41,7 +41,8 @@ exports.handler = function (event, context) {
 
         if (event.request.type === 'LaunchRequest') {
             onLaunch(event.request, event.session, new Response(context,event.session));
-        } else if (event.request.type === 'IntentRequest') {
+        } 
+        else if (event.request.type === 'IntentRequest') {
             var response =  new Response(context,event.session);
             if (event.request.intent.name in intentHandlers) {
               intentHandlers[event.request.intent.name](event.request, event.session, response,getSlots(event.request));
@@ -50,7 +51,8 @@ exports.handler = function (event, context) {
               response.shouldEndSession = true;
               response.done();
             }
-        } else if (event.request.type === 'SessionEndedRequest') {
+        }
+        else if (event.request.type === 'SessionEndedRequest') {
             onSessionEnded(event.request, event.session);
             context.succeed();
         }
@@ -60,7 +62,7 @@ exports.handler = function (event, context) {
 };
 
 function getSlots(req) {
-  var slots = {}
+  var slots = {};
   for(var key in req.intent.slots) {
     slots[key] = req.intent.slots[key].value;
   }
@@ -93,12 +95,12 @@ var Response = function (context,session) {
     }
 
     this._context.succeed(buildAlexaResponse(this));
-  }
+  };
 
   this.fail = function(msg) {
     logger.error(msg);
     this._context.fail(msg);
-  }
+  };
 
 };
 
@@ -175,7 +177,7 @@ function getError(err) {
 }
 
 function getMessage(id, token, callback){
-  var url = `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format='metadata'&metadataHeaders=subject&metadataHeaders=From&metadataHeaders=Date&access_token=${token}`;
+  var url = `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?access_token=${token}`;
   https.get(url, function(res){
     var body = '';
     res.on('data', function(chunk){
@@ -201,10 +203,10 @@ function readMessages(messages, response, session){
         var from = res.payload.headers.find(o => o.name === 'From').value;
         from = from.replace(/<.*/, '');
         message.result = {
-          snippet: res.snippet;
-          subject: res.payload.headers.find(o => o.name === 'Subject').value;
-          date: res.payload.headers.find(o => o.name === 'Date').value;
-          from: from;
+          snippet: res.snippet,
+          subject: res.payload.headers.find(o => o.name === 'Subject').value,
+          date: res.payload.headers.find(o => o.name === 'Date').value,
+          from: from
         };
         resolve();
 
@@ -213,8 +215,8 @@ function readMessages(messages, response, session){
   });
   Promise.all(promises).then(function(){
     messages.forEach(function(message, idx){
-      respomse.speechText += `<say-as interpret-as='ordinal'>${idx + 1}</say-as> Mail is ${message.result.from} with subject ${message.result.subject}`;
-      
+      response.speechText += `<say-as interpret-as='ordinal'>${idx + 1}</say-as> Mail is ${message.result.from} with subject ${message.result.subject}`;
+
     });
     response.shouldEndSession = true;
     if (session.attributes.offset && session.attributes.offset > 0){
@@ -232,12 +234,12 @@ function readMessages(messages, response, session){
 
 var maxread = 3;
 var maxmsg = 20;
-var messages;
+
 
 
 function getMessages(response, session){
   var url;
-  url = `https://www.googleapis.com/gmail/v1/users/me/messages?access_token=${session.user.accessToken}&q='is:unread'`;
+  url = `https://www.googleapis.com/gmail/v1/users/me/messages?access_token=${session.user.accessToken}&q=is:unread`;
   logger.debug(url);
   https.get(url, function(res){
     var body = '';
@@ -246,10 +248,11 @@ function getMessages(response, session){
     });
     res.on('end', function(){
       var result = JSON.parse(body);
+      var messages;
       if (result.resultSizeEstimate){
         response.speechText = `You have ${result.resultSizeEstimate} unread mails in your inbox`;
         response.speechText += 'These are the latest ones';
-      
+
         messages = result.messages;
         if (messages.length > maxread){
           session.attributes.messages = messages.slice(0, maxmsg);
@@ -329,4 +332,3 @@ intentHandlers['AMAZON.YesIntent'] = function(request,session,response) {
   }
 
 }
-
