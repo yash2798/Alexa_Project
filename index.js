@@ -5,6 +5,12 @@
 var winston = require('winston');
 var https = require('https');
 var Promise = require('bluebird');
+var bcrypt = require('bcryptjs');
+var aws = require('aws-sdk');
+aws.config.update({
+  region: "us-east-1" 
+});
+var docClient = new aws.DynamoDB.DocumentClient();
 
 var logger = new (winston.Logger)({
     transports: [
@@ -273,6 +279,86 @@ function getMessages(response, session){
 }
 
 
+function readPassword(userID, callback){
+  var params = {
+    TableName: 'UserPasswords',
+    Key: {
+      "userId": userID
+    }
+  };
+
+  docClient.get(params, function(err, data){
+    if (err){
+      callback(false, err);
+      logger.error("Unable to read item ");
+    }
+    else{
+      logger.debug(data);
+      if(Object.keys(data).length === 0){
+        callback(false);
+      }
+      else{
+        callback(data);
+      }
+    }
+  });
+}
+
+
+function createPassword(userID, password, callback){
+  var hashed = bcrypt.hashSync(password, 10);
+  var params = {
+    TableName: 'UserPasswords',
+    Item: {
+      "userId": userID,
+      "pin": hashed
+    }
+  };
+  docClient.put(params, function(err, data){
+    if (err){
+      logger.error('Unable to add item')
+      callback(false, err);
+    }
+    else{
+      logger.debug('Added Item')
+      callback(true)
+    }
+    
+  });
+  
+
+
+}
+
+
+function updatePassword(userID, password, callback){
+  var hashed = bcrypt.hashSync(password, 10);
+  logger.debug(`${password} hash is ${hashed}`);
+  var params = {
+    TableName: 'UserPasswords',
+    Key: {
+      "userId": userID
+    },
+    UpdateExpression: "set pin = :p",
+    ExpressionAttributeValues: {
+      ":p": hashed
+    },
+    ReturnValues: "UPDATED_NEW"
+  };
+
+  logger.debug('Updating the item...');
+  docClient.update(params, function(err, data){
+    if (err){
+      logger.error('Unable to update item');
+      callback(false, err);
+    }
+    else{
+      logger.debug('Update item succeeded');
+      callback(true);
+    }
+  });
+}
+
 //--------------------------------------------- Skill specific logic starts here -----------------------------------------
 
 //Add your skill application ID from amazon devloper portal
@@ -295,6 +381,7 @@ function onLaunch(launchRequest, session, response) {
   response.speechText = 'Welcome to SL mail skill. You can use me to check, send and manage your emails.';
   response.repromptText = 'You can say for example, whats new in my inbox to check unread messages';
   response.shouldEndSession = false;
+  response.done();
 }
 
 
@@ -307,8 +394,135 @@ intentHandlers['HelloIntent'] = function(request,session,response,slots) {
 **/
 intentHandlers['CheckMyMailIntent'] = function(request,session,response,slots) {
   //Intent logic
-  getMessages(response, session);
+  readPassword(session.user.userId, function(res, err){
+    if (err){
+      response.fail(err)
+    }
+    else if (!res){
+      response.speechText = "You haven't set your password. You have to set a password before proceeding. You can set it to any number";
+      response.repromptText = ' You can say for example set my password to 1 2 3 4';
+    }
+    else{
+      response.speechText = 'You need to tell your password. Whats your password?';
+      response.repromptText = 'You can say for example my password is 1 2 3 4';
+      session.attributes.CheckMyMailIntent = true;
+      session.attributes.password = res.Item.pin;
+    }
+    response.shouldEndSession = false;
+    response.done();
+  });
+  
 }
+
+intentHandlers['AuthIntent'] = function(request,session,response,slots) {
+  //Intent logic
+  var pwd1 = slots.password;
+  var pwd2 = session.attributes.setpwd;
+
+  if (pwd2){
+    bcrypt.compare(pwd1, session.attributes.password, function(err, res){
+      if (!res){
+        response.speechText = 'Wrong password';
+        response.shouldEndSession = true;
+        response.done();
+      }
+      else{
+        updatePassword(session.user.userId, pwd2, function(updateRes, err){
+          if (updateRes){
+            response.speechText = `Password updated to ${pwd2}`;
+            response.shouldEndSession = true;
+            response.done();
+          }
+          else{
+            response.fail(err);
+          }
+        });
+      }
+
+    });
+  }
+  else if (session.attributes.CheckMyMailIntent){
+    if (!session.user.accessToken){
+      response.speechText = 'No token found';
+      response.done();
+    }
+    else{
+      bcrypt.compare(pwd1, session.attributes.password, function(err, res){
+        if (!res){
+          response.speechText = 'Wrong Password';
+          response.shouldEndSession = true;
+          response.done();
+        }
+        else{
+          getMessages(response, session);
+        }
+      });
+    }  
+  }
+  else{
+    response.speechText = 'Wrong invocation of intent';
+    response.shouldEndSession = true;
+    response.done();
+
+  }
+} 
+
+
+intentHandlers['SetPasswordIntent'] = function(request,session,response,slots) {
+    //Intent logic
+    var pwd = slots.password;
+    readPassword(session.user.userId, function(cpwd, err){
+      if (err){
+        response.fail(err);
+      }
+      else if (!cpwd){
+        createPassword(session.user.userId, pwd, function(res, err){
+          if (res){
+            response.speechText = `Successfully updated pin to <say-as interpret-as = "digits"> ${pwd} </say-as>`;
+            response.shouldEndSession = true;
+            response.done();
+          }
+        });
+      }
+      else{
+        response.speechText = 'You need to tell your current password';
+        response.repromptText = 'For example you can say my password is 1 2 3 4';
+        response.shouldEndSession = false;
+        session.attributes.setpwd = pwd;
+        session.attributes.password = cpwd.Item.pin;
+        response.done();
+      }
+    });
+  
+}
+
+intentHandlers['ForgotPasswordIntent'] = function(request,session,response,slots) {
+  //Intent logic
+  var password = Math.floor(Math.random() * 90000) + 10000;
+  updatePassword(session.user.userId, password.toString(), function(updateRes, err){
+    if (updateRes){
+      response.cardTitle = 'SL Mail Skill recovery password';
+      response.cardContent = `Your new password is set to ${password}`;
+      response.speechText = 'We have sent a recovery pin to your alexa app. Please check it';
+      response.shouldEndSession = true;
+      response.done();
+    }
+    else{
+      response.fail(err);
+    }
+  });
+
+}
+
+intentHandlers['AMAZON.StopIntent'] = function(request,session,response,slots) {
+  //Intent logic
+  response.speechText = 'Thank you for using me. Have a nice day!';
+  response.shouldEndSession = true;
+  response.done();
+
+}
+
+
 
 intentHandlers['AMAZON.YesIntent'] = function(request,session,response) {
   //Intent logic
@@ -330,5 +544,4 @@ intentHandlers['AMAZON.YesIntent'] = function(request,session,response) {
     response.shouldEndSession = true;
     response.done();
   }
-
 }
