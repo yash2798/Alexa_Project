@@ -1,0 +1,25 @@
+{
+  "session": {
+    "sessionId": "SessionId.9a334490-4238-42e6-a4e9-28a6470a78e7",
+    "application": {
+      "applicationId": "amzn1.ask.skill.7775a0ba-f431-4bcc-a03e-959f14b24c04"
+    },
+    "attributes": {},
+    "user": {
+      "userId": "amzn1.ask.account.AGSM43SI352SULJJB2J2YEABTYN6NXEX636RW7I4OLU7OR3CMD57GYZJOIU7WNNK7Z3GBKGM4IBYZSYQBMEMWMVTBBQXEATWKRKWS7QO5VHFUYLERQJ4YS26MU2AGEJ7DYHMOC74EQV2NGKFQZZOILYES5BGQJBLEP6B7EJ6RKTIQGU4OEEG3A43O54UISDXYDCFGQKSS5B35JY",
+      "accessToken": "ya29.GlzcBa9ygY8qE1n-QW28NsTilCv5gWxloMsNzKlDSV1rfEABfInoD13XELepNbRIP8XZRvsVs9VEf4fn0E0pQTZOmZbvefCO-_uXtRtyl1CIG8p1FOecdv19Qy2d6Q"
+    },
+    "new": true
+  },
+  "request": {
+    "type": "IntentRequest",
+    "requestId": "EdwRequestId.20fbf33c-05ec-49d8-a67f-1f30fa9a1c2f",
+    "locale": "en-US",
+    "timestamp": "2017-02-07T09:40:55Z",
+    "intent": {
+      "name": "CheckMyMailIntent",
+      "slots": {}
+    }
+  },
+  "version": "1.0"
+}
